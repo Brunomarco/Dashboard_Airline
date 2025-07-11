@@ -288,15 +288,20 @@ def create_route_analysis(df, origin, destination):
     # Sort by price for better visualization
     route_data = route_data.sort_values('min_charge2')
     
-    # Create professional chart
+    # Debug: Show what colors are being assigned
+    # st.write("Debug - Colors being used:", route_data[['airline', 'rating', 'color']].to_dict('records'))
+    
+    # Create professional chart with COLORS BASED ON RATING
     fig = go.Figure()
     
-    # Add bars with enhanced styling and proper colors based on rating
+    # Add bars with colors based on rating (1=Green, 2=Orange, 3=Red)
     fig.add_trace(go.Bar(
         x=route_data['airline'],
         y=route_data['min_charge2'],
-        marker_color=route_data['color'],  # This uses the color column we created
-        marker_line=dict(width=1, color='rgba(0,0,0,0.1)'),
+        marker=dict(
+            color=route_data['color'],  # Use the color column
+            line=dict(width=1, color='rgba(0,0,0,0.1)')
+        ),
         text=[f"${price:.2f}" for price in route_data['min_charge2']],
         textposition='outside',
         textfont=dict(size=12, color='#1f2937', weight='bold'),
@@ -431,7 +436,7 @@ def create_airlines_overview(df):
     """Create comprehensive airlines performance overview"""
     st.markdown('<div class="section-header">🏢 Carrier Performance Dashboard</div>', unsafe_allow_html=True)
     
-    # Calculate airline statistics
+    # Calculate airline statistics - ONLY what was requested
     airline_stats = df.groupby('airline').agg({
         'min_charge2': 'mean',
         'route': 'nunique',
@@ -446,19 +451,19 @@ def create_airlines_overview(df):
     # Performance Summary Table
     st.markdown("### 📊 Carrier Performance Summary")
     
-    # Format for executive presentation
+    # Format for executive presentation - ONLY 4 columns
     display_stats = airline_stats.copy()
     display_stats['avg_rate'] = display_stats['avg_rate'].apply(lambda x: f"${x:.2f}")
     
-    # Professional column names
+    # Professional column names - ONLY the requested ones
     display_stats = display_stats.rename(columns={
         'airline': 'Carrier',
-        'avg_rate': 'Average Rate',
+        'routes_covered': 'Routes Covered',
         'total_bids': 'Total Bids',
-        'routes_covered': 'Routes Covered'
+        'avg_rate': 'Average Rate'
     })
     
-    # Reorder columns
+    # Show ONLY the 4 requested columns
     display_stats = display_stats[['Carrier', 'Routes Covered', 'Total Bids', 'Average Rate']]
     
     st.dataframe(display_stats, use_container_width=True, hide_index=True)
