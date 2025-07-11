@@ -610,8 +610,9 @@ def main():
                 create_airlines_overview(df)
     
     else:
-        # Professional landing page
-        show_executive_overview(df)
+        # Professional landing page - create empty dataframe
+        empty_df = pd.DataFrame()
+        show_executive_overview(empty_df)
         
         st.markdown("""
         <div class="insight-box">
