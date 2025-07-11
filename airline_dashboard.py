@@ -293,11 +293,6 @@ def create_route_analysis(df, origin, destination):
         else:
             st.metric("📈 Price Spread", "$0.00")
     
-    # Debug: Let's see what data we have for this route
-    st.write("**Debug Info:**")
-    debug_data = route_data[['airline', 'min_charge2', 'rating', 'rating_category', 'color']].copy()
-    st.dataframe(debug_data)
-    
     # Carrier Comparison Chart
     st.markdown("### 🏆 Carrier Competitiveness Analysis")
     
@@ -466,26 +461,30 @@ def create_airlines_overview(df):
     """Create comprehensive airlines performance overview"""
     st.markdown('<div class="section-header">🏢 Carrier Performance Dashboard</div>', unsafe_allow_html=True)
     
-    # Calculate airline statistics - ONLY what was requested
-    airline_stats = df.groupby('airline').agg({
-        'min_charge2': 'mean',
-        'route': 'nunique',
-        'rating': 'count'  # Total bids count
-    }).round(2)
+    # Calculate airline statistics step by step to avoid confusion
+    avg_rates = df.groupby('airline')['min_charge2'].mean().round(2)
+    routes_covered = df.groupby('airline')['route'].nunique()
+    total_bids = df.groupby('airline').size()  # Count rows per airline
     
-    # Flatten column names
-    airline_stats.columns = ['avg_rate', 'routes_covered', 'total_bids']
-    airline_stats = airline_stats.reset_index()
+    # Combine into one dataframe
+    airline_stats = pd.DataFrame({
+        'airline': avg_rates.index,
+        'avg_rate': avg_rates.values,
+        'routes_covered': routes_covered.values,
+        'total_bids': total_bids.values
+    })
+    
+    # Sort by total bids
     airline_stats = airline_stats.sort_values('total_bids', ascending=False)
     
     # Performance Summary Table
     st.markdown("### 📊 Carrier Performance Summary")
     
-    # Format for executive presentation - ONLY 4 columns
+    # Format for executive presentation
     display_stats = airline_stats.copy()
     display_stats['avg_rate'] = display_stats['avg_rate'].apply(lambda x: f"${x:.2f}")
     
-    # Professional column names - ONLY the requested ones
+    # Professional column names
     display_stats = display_stats.rename(columns={
         'airline': 'Carrier',
         'routes_covered': 'Routes Covered',
@@ -493,7 +492,7 @@ def create_airlines_overview(df):
         'avg_rate': 'Average Rate'
     })
     
-    # Show ONLY the 4 requested columns
+    # Show the 4 columns in correct order
     display_stats = display_stats[['Carrier', 'Routes Covered', 'Total Bids', 'Average Rate']]
     
     st.dataframe(display_stats, use_container_width=True, hide_index=True)
