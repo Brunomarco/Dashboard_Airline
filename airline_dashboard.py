@@ -213,7 +213,7 @@ def show_executive_overview(df):
     
     # Only show metrics if data is available
     if not df.empty and 'route' in df.columns:
-        # Key Metrics
+        # Key Metrics with explanations
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -222,7 +222,7 @@ def show_executive_overview(df):
             <div class="metric-card">
             <h4 style="color: #1e40af; margin: 0;">🌍 Global Routes</h4>
             <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_routes:,}</h2>
-            <p style="color: #6b7280; margin: 0;">Origin-destination pairs</p>
+            <p style="color: #6b7280; margin: 0;">Unique shipping lanes available</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -232,7 +232,7 @@ def show_executive_overview(df):
             <div class="metric-card">
             <h4 style="color: #1e40af; margin: 0;">✈️ Carrier Network</h4>
             <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_airlines:,}</h2>
-            <p style="color: #6b7280; margin: 0;">Competing airlines</p>
+            <p style="color: #6b7280; margin: 0;">Airlines bidding for your business</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -242,22 +242,33 @@ def show_executive_overview(df):
             <div class="metric-card">
             <h4 style="color: #1e40af; margin: 0;">💰 Average Rate</h4>
             <h2 style="color: #1f2937; margin: 0.5rem 0;">${avg_price:.2f}</h2>
-            <p style="color: #6b7280; margin: 0;">Per shipment</p>
+            <p style="color: #6b7280; margin: 0;">Typical cost across all routes</p>
             </div>
             """, unsafe_allow_html=True)
         
         with col4:
-            if 'rating' in df.columns:
-                best_rate_pct = (df['rating'] == 1).mean() * 100
+            if 'direct_indirect' in df.columns:
+                direct_rate = (df['direct_indirect'].str.lower() == 'direct').mean() * 100
             else:
-                best_rate_pct = 0
+                direct_rate = 0
             st.markdown(f"""
             <div class="metric-card">
-            <h4 style="color: #1e40af; margin: 0;">🎯 Optimization Rate</h4>
-            <h2 style="color: #1f2937; margin: 0.5rem 0;">{best_rate_pct:.1f}%</h2>
-            <p style="color: #6b7280; margin: 0;">Best pricing options</p>
+            <h4 style="color: #1e40af; margin: 0;">✈️ Direct Routes</h4>
+            <h2 style="color: #1f2937; margin: 0.5rem 0;">{direct_rate:.1f}%</h2>
+            <p style="color: #6b7280; margin: 0;">Non-stop connections available</p>
             </div>
             """, unsafe_allow_html=True)
+        
+        # Add brief explanation
+        st.markdown("""
+        <div class="insight-box">
+        <h4>📈 What These Numbers Mean</h4>
+        <p><strong>Routes:</strong> More routes = better global coverage and shipping flexibility</p>
+        <p><strong>Carriers:</strong> More airlines = increased competition and better pricing options</p>
+        <p><strong>Average Rate:</strong> Benchmark for comparing individual route pricing</p>
+        <p><strong>Direct Routes:</strong> Higher percentage = faster delivery times and reduced handling</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 def create_route_analysis(df, origin, destination):
     """Create detailed analysis for a specific route"""
@@ -271,6 +282,13 @@ def create_route_analysis(df, origin, destination):
     
     # Route Performance Metrics
     st.markdown(f'<div class="section-header">📍 Route Analysis: {route_name}</div>', unsafe_allow_html=True)
+    
+    # Brief explanation for route metrics
+    st.markdown("""
+    <div style="background-color: #f8fafc; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+    <p style="margin: 0; color: #374151;"><strong>Route Metrics:</strong> Compare carrier options and identify cost-saving opportunities for this specific shipping lane.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -544,13 +562,10 @@ def create_airlines_overview(df):
     # Market Insights
     st.markdown("""
     <div class="insight-box">
-    <h4>📈 Market Analysis Insights</h4>
-    <p><strong>Chart Interpretation:</strong></p>
-    <ul>
-        <li><strong>Left Chart:</strong> Shows carrier market coverage (x-axis) vs pricing levels (y-axis). Bubble size indicates bid volume.</li>
-        <li><strong>Right Chart:</strong> Ranks carriers by their total number of bids submitted.</li>
-        <li><strong>Strategic Value:</strong> Identify carriers that offer both broad coverage and competitive pricing for partnership opportunities.</li>
-    </ul>
+    <h4>📈 Chart Explanations</h4>
+    <p><strong>Left Chart - Market Coverage vs Pricing:</strong> Shows relationship between number of routes served (x-axis) and average pricing (y-axis). Bubble size represents bid volume. Ideal carriers are in bottom-right (many routes, competitive pricing).</p>
+    <p><strong>Right Chart - Most Active Carriers:</strong> Ranks airlines by total number of bids submitted. Higher activity often indicates stronger market presence and reliability.</p>
+    <p><strong>Strategic Insight:</strong> Target carriers with both broad coverage and competitive pricing for preferred partnerships.</p>
     </div>
     """, unsafe_allow_html=True)
 
