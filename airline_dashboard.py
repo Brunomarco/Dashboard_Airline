@@ -156,11 +156,11 @@ def load_data(uploaded_file):
             if pd.isna(rating):
                 return '#6b7280'  # Gray for unknown
             elif rating == 1:
-                return '#10b981'  # Green - Best
+                return '#22c55e'  # Bright Green - Best
             elif rating == 2:
-                return '#f59e0b'  # Orange - Fair
+                return '#f97316'  # Bright Orange - Fair
             elif rating == 3:
-                return '#ef4444'  # Red - Premium
+                return '#ef4444'  # Bright Red - Premium
             else:
                 return '#6b7280'  # Gray for other values
         
@@ -291,15 +291,15 @@ def create_route_analysis(df, origin, destination):
     # Create professional chart
     fig = go.Figure()
     
-    # Add bars with enhanced styling
+    # Add bars with enhanced styling and proper colors based on rating
     fig.add_trace(go.Bar(
         x=route_data['airline'],
         y=route_data['min_charge2'],
-        marker_color=route_data['color'],
-        marker_line=dict(width=0),
+        marker_color=route_data['color'],  # This uses the color column we created
+        marker_line=dict(width=1, color='rgba(0,0,0,0.1)'),
         text=[f"${price:.2f}" for price in route_data['min_charge2']],
         textposition='outside',
-        textfont=dict(size=12, color='#1f2937'),
+        textfont=dict(size=12, color='#1f2937', weight='bold'),
         hovertemplate="<b>%{x}</b><br>" +
                       "Rate: $%{y:.2f}<br>" +
                       "Rating: %{customdata}<br>" +
@@ -433,13 +433,13 @@ def create_airlines_overview(df):
     
     # Calculate airline statistics
     airline_stats = df.groupby('airline').agg({
-        'min_charge2': ['mean', 'min', 'max', 'count'],
+        'min_charge2': 'mean',
         'route': 'nunique',
-        'rating': lambda x: (x == 1).sum() / len(x) * 100 if len(x) > 0 else 0
+        'rating': 'count'  # Total bids count
     }).round(2)
     
     # Flatten column names
-    airline_stats.columns = ['avg_rate', 'min_rate', 'max_rate', 'total_bids', 'routes_served', 'competitiveness_score']
+    airline_stats.columns = ['avg_rate', 'routes_covered', 'total_bids']
     airline_stats = airline_stats.reset_index()
     airline_stats = airline_stats.sort_values('total_bids', ascending=False)
     
@@ -449,20 +449,17 @@ def create_airlines_overview(df):
     # Format for executive presentation
     display_stats = airline_stats.copy()
     display_stats['avg_rate'] = display_stats['avg_rate'].apply(lambda x: f"${x:.2f}")
-    display_stats['min_rate'] = display_stats['min_rate'].apply(lambda x: f"${x:.2f}")
-    display_stats['max_rate'] = display_stats['max_rate'].apply(lambda x: f"${x:.2f}")
-    display_stats['competitiveness_score'] = display_stats['competitiveness_score'].apply(lambda x: f"{x:.1f}%")
     
     # Professional column names
     display_stats = display_stats.rename(columns={
         'airline': 'Carrier',
         'avg_rate': 'Average Rate',
-        'min_rate': 'Best Rate',
-        'max_rate': 'Highest Rate',
         'total_bids': 'Total Bids',
-        'routes_served': 'Routes Covered',
-        'competitiveness_score': 'Competitiveness Score'
+        'routes_covered': 'Routes Covered'
     })
+    
+    # Reorder columns
+    display_stats = display_stats[['Carrier', 'Routes Covered', 'Total Bids', 'Average Rate']]
     
     st.dataframe(display_stats, use_container_width=True, hide_index=True)
     
@@ -473,19 +470,16 @@ def create_airlines_overview(df):
         # Market Coverage vs Pricing
         fig1 = px.scatter(
             airline_stats.head(15),
-            x='routes_served',
+            x='routes_covered',
             y='avg_rate',
             size='total_bids',
-            color='competitiveness_score',
             hover_name='airline',
             title="Market Coverage vs Average Pricing",
             labels={
-                'routes_served': 'Routes Served',
+                'routes_covered': 'Routes Covered',
                 'avg_rate': 'Average Rate (USD)',
-                'competitiveness_score': 'Competitiveness (%)',
                 'total_bids': 'Total Bids'
-            },
-            color_continuous_scale='RdYlGn'
+            }
         )
         fig1.update_layout(
             height=400,
@@ -495,17 +489,15 @@ def create_airlines_overview(df):
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
-        # Top Competitive Carriers
-        top_competitive = airline_stats.nlargest(10, 'competitiveness_score')
+        # Top carriers by total bids
+        top_carriers = airline_stats.nlargest(10, 'total_bids')
         
         fig2 = px.bar(
-            top_competitive,
+            top_carriers,
             x='airline',
-            y='competitiveness_score',
-            title='Most Competitive Carriers (% Best Rates)',
-            labels={'competitiveness_score': 'Competitiveness Score (%)', 'airline': 'Carriers'},
-            color='competitiveness_score',
-            color_continuous_scale='RdYlGn'
+            y='total_bids',
+            title='Most Active Carriers (Total Bids)',
+            labels={'total_bids': 'Total Bids', 'airline': 'Carriers'}
         )
         fig2.update_layout(
             height=400,
@@ -521,8 +513,8 @@ def create_airlines_overview(df):
     <h4>📈 Market Analysis Insights</h4>
     <p><strong>Chart Interpretation:</strong></p>
     <ul>
-        <li><strong>Left Chart:</strong> Shows carrier market coverage (x-axis) vs pricing levels (y-axis). Bubble size indicates bid volume. Green colors represent higher competitiveness.</li>
-        <li><strong>Right Chart:</strong> Ranks carriers by their competitiveness score - percentage of routes where they offer the best pricing.</li>
+        <li><strong>Left Chart:</strong> Shows carrier market coverage (x-axis) vs pricing levels (y-axis). Bubble size indicates bid volume.</li>
+        <li><strong>Right Chart:</strong> Ranks carriers by their total number of bids submitted.</li>
         <li><strong>Strategic Value:</strong> Identify carriers that offer both broad coverage and competitive pricing for partnership opportunities.</li>
     </ul>
     </div>
