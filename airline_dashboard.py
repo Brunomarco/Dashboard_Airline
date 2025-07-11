@@ -151,20 +151,31 @@ def load_data(uploaded_file):
         # Create route column
         df['route'] = df['origin_airport'] + ' → ' + df['destination_airport']
         
-        # Create color mapping based on numerical rating and category
-        def get_color_from_rating(rating):
-            if pd.isna(rating):
-                return '#6b7280'  # Gray for unknown
-            elif rating == 1:
-                return '#22c55e'  # Bright Green - Best
-            elif rating == 2:
-                return '#f97316'  # Bright Orange - Fair
-            elif rating == 3:
-                return '#ef4444'  # Bright Red - Premium
-            else:
-                return '#6b7280'  # Gray for other values
+        # Create color mapping based on BOTH numerical rating AND rating_category
+        def get_color_from_data(row):
+            # First try to use rating_category (Green/Red/Orange)
+            if pd.notna(row.get('rating_category')) and str(row.get('rating_category')).strip() != 'None':
+                category = str(row.get('rating_category')).strip().lower()
+                if category == 'green':
+                    return '#22c55e'  # Bright Green
+                elif category == 'orange':
+                    return '#f97316'  # Bright Orange  
+                elif category == 'red':
+                    return '#ef4444'  # Bright Red
+            
+            # If rating_category is not available, use numerical rating
+            rating = row.get('rating')
+            if pd.notna(rating):
+                if rating == 1:
+                    return '#22c55e'  # Bright Green
+                elif rating == 2:
+                    return '#f97316'  # Bright Orange
+                elif rating == 3:
+                    return '#ef4444'  # Bright Red
+            
+            return '#6b7280'  # Gray for unknown
         
-        df['color'] = df['rating'].apply(get_color_from_rating)
+        df['color'] = df.apply(get_color_from_data, axis=1)
         
         # Clean rating category
         if 'rating_category' in df.columns:
@@ -282,29 +293,48 @@ def create_route_analysis(df, origin, destination):
         else:
             st.metric("📈 Price Spread", "$0.00")
     
+    # Debug: Let's see what data we have for this route
+    st.write("**Debug Info:**")
+    debug_data = route_data[['airline', 'min_charge2', 'rating', 'rating_category', 'color']].copy()
+    st.dataframe(debug_data)
+    
     # Carrier Comparison Chart
     st.markdown("### 🏆 Carrier Competitiveness Analysis")
     
     # Sort by price for better visualization
     route_data = route_data.sort_values('min_charge2')
     
-    # Debug: Show what colors are being assigned
-    # st.write("Debug - Colors being used:", route_data[['airline', 'rating', 'color']].to_dict('records'))
+    # Force color assignment based on what we see in the data
+    def assign_colors_manually(row):
+        # Use rating_category if available
+        if pd.notna(row['rating_category']) and str(row['rating_category']).strip().lower() in ['green', 'red', 'orange']:
+            category = str(row['rating_category']).strip().lower()
+            if category == 'green':
+                return '#22c55e'
+            elif category == 'orange': 
+                return '#f97316'
+            elif category == 'red':
+                return '#ef4444'
+        return '#6b7280'
     
-    # Create professional chart with COLORS BASED ON RATING
+    route_data['display_color'] = route_data.apply(assign_colors_manually, axis=1)
+    
+    # Create professional chart with FORCED COLORS
     fig = go.Figure()
     
-    # Add bars with colors based on rating (1=Green, 2=Orange, 3=Red)
+    # Add bars with explicit color list
+    colors_list = route_data['display_color'].tolist()
+    
     fig.add_trace(go.Bar(
         x=route_data['airline'],
         y=route_data['min_charge2'],
         marker=dict(
-            color=route_data['color'],  # Use the color column
+            color=colors_list,  # Use explicit color list
             line=dict(width=1, color='rgba(0,0,0,0.1)')
         ),
         text=[f"${price:.2f}" for price in route_data['min_charge2']],
         textposition='outside',
-        textfont=dict(size=12, color='#1f2937', weight='bold'),
+        textfont=dict(size=12, color='#1f2937'),
         hovertemplate="<b>%{x}</b><br>" +
                       "Rate: $%{y:.2f}<br>" +
                       "Rating: %{customdata}<br>" +
