@@ -200,51 +200,53 @@ def show_executive_overview(df):
     </div>
     """, unsafe_allow_html=True)
     
-    # Key Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_routes = df['route'].nunique()
-        st.markdown(f"""
-        <div class="metric-card">
-        <h4 style="color: #1e40af; margin: 0;">🌍 Global Routes</h4>
-        <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_routes:,}</h2>
-        <p style="color: #6b7280; margin: 0;">Origin-destination pairs</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        total_airlines = df['airline'].nunique()
-        st.markdown(f"""
-        <div class="metric-card">
-        <h4 style="color: #1e40af; margin: 0;">✈️ Carrier Network</h4>
-        <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_airlines:,}</h2>
-        <p style="color: #6b7280; margin: 0;">Competing airlines</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        avg_price = df['min_charge2'].mean()
-        st.markdown(f"""
-        <div class="metric-card">
-        <h4 style="color: #1e40af; margin: 0;">💰 Average Rate</h4>
-        <h2 style="color: #1f2937; margin: 0.5rem 0;">${avg_price:.2f}</h2>
-        <p style="color: #6b7280; margin: 0;">Per shipment</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        if 'rating' in df.columns:
-            best_rate_pct = (df['rating'] == 1).mean() * 100
-        else:
-            best_rate_pct = 0
-        st.markdown(f"""
-        <div class="metric-card">
-        <h4 style="color: #1e40af; margin: 0;">🎯 Optimization Rate</h4>
-        <h2 style="color: #1f2937; margin: 0.5rem 0;">{best_rate_pct:.1f}%</h2>
-        <p style="color: #6b7280; margin: 0;">Best pricing options</p>
-        </div>
-        """, unsafe_allow_html=True)
+    # Only show metrics if data is available
+    if not df.empty and 'route' in df.columns:
+        # Key Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_routes = df['route'].nunique()
+            st.markdown(f"""
+            <div class="metric-card">
+            <h4 style="color: #1e40af; margin: 0;">🌍 Global Routes</h4>
+            <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_routes:,}</h2>
+            <p style="color: #6b7280; margin: 0;">Origin-destination pairs</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            total_airlines = df['airline'].nunique()
+            st.markdown(f"""
+            <div class="metric-card">
+            <h4 style="color: #1e40af; margin: 0;">✈️ Carrier Network</h4>
+            <h2 style="color: #1f2937; margin: 0.5rem 0;">{total_airlines:,}</h2>
+            <p style="color: #6b7280; margin: 0;">Competing airlines</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            avg_price = df['min_charge2'].mean()
+            st.markdown(f"""
+            <div class="metric-card">
+            <h4 style="color: #1e40af; margin: 0;">💰 Average Rate</h4>
+            <h2 style="color: #1f2937; margin: 0.5rem 0;">${avg_price:.2f}</h2>
+            <p style="color: #6b7280; margin: 0;">Per shipment</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            if 'rating' in df.columns:
+                best_rate_pct = (df['rating'] == 1).mean() * 100
+            else:
+                best_rate_pct = 0
+            st.markdown(f"""
+            <div class="metric-card">
+            <h4 style="color: #1e40af; margin: 0;">🎯 Optimization Rate</h4>
+            <h2 style="color: #1f2937; margin: 0.5rem 0;">{best_rate_pct:.1f}%</h2>
+            <p style="color: #6b7280; margin: 0;">Best pricing options</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 def create_route_analysis(df, origin, destination):
     """Create detailed analysis for a specific route"""
@@ -609,7 +611,7 @@ def main():
     
     else:
         # Professional landing page
-        show_executive_overview(pd.DataFrame())  # Empty df for demo
+        show_executive_overview(df)
         
         st.markdown("""
         <div class="insight-box">
