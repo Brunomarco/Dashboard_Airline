@@ -131,20 +131,43 @@ def load_data(uploaded_file):
         # Create route column
         df['route'] = df['origin_airport'] + ' ➜ ' + df['destination_airport']
         
-        # Clean percentage column and create color mapping
+        # Clean percentage column and create color mapping based on numerical rating
         if 'percentage' in df.columns:
             df['percentage'] = df['percentage'].astype(str).str.strip()
-            # Map colors for visualization
-            color_map = {
-                'Green': '#28a745',
-                'Orange': '#fd7e14', 
-                'Red': '#dc3545',
-                'green': '#28a745',
-                'orange': '#fd7e14', 
-                'red': '#dc3545'
-            }
-            df['color'] = df['percentage'].map(color_map)
-            df['color'] = df['color'].fillna('#6c757d')  # Gray for unknown
+        
+        # Create color mapping based on numerical rating (1=Green, 2=Orange, 3=Red)
+        if 'rating' in df.columns:
+            def get_color_from_rating(rating):
+                if pd.isna(rating):
+                    return '#6c757d'  # Gray for unknown
+                elif rating == 1:
+                    return '#28a745'  # Green
+                elif rating == 2:
+                    return '#fd7e14'  # Orange
+                elif rating == 3:
+                    return '#dc3545'  # Red
+                else:
+                    return '#6c757d'  # Gray for other values
+            
+            df['color'] = df['rating'].apply(get_color_from_rating)
+            
+            # Also create a rating category column for display
+            def get_category_from_rating(rating):
+                if pd.isna(rating):
+                    return 'Unknown'
+                elif rating == 1:
+                    return 'Best Price'
+                elif rating == 2:
+                    return 'Fair Price'
+                elif rating == 3:
+                    return 'Premium Price'
+                else:
+                    return 'Unknown'
+            
+            df['rating_category'] = df['rating'].apply(get_category_from_rating)
+        else:
+            df['color'] = '#6c757d'
+            df['rating_category'] = 'Unknown'
         
         # Filter out rows with missing critical data
         df = df.dropna(subset=['origin_airport', 'destination_airport', 'airline', 'min_charge2'])
@@ -223,21 +246,21 @@ def create_route_analysis(df, origin, destination):
     # Sort by price for better visualization
     route_data = route_data.sort_values('min_charge2')
     
-    # Create the main chart with proper color mapping
+    # Create the main chart with proper color mapping based on numerical rating
     fig = go.Figure()
     
-    # Add bars with colors based on percentage rating
+    # Add bars with colors based on numerical rating (1=Green, 2=Orange, 3=Red)
     fig.add_trace(go.Bar(
         x=route_data['airline'],
         y=route_data['min_charge2'],
         marker_color=route_data['color'],
-        text=[f"${price:.2f}<br>{category}" for price, category in zip(route_data['min_charge2'], route_data['percentage'])],
+        text=[f"${price:.2f}<br>Rating: {rating}" for price, rating in zip(route_data['min_charge2'], route_data['rating'])],
         textposition='outside',
         hovertemplate="<b>%{x}</b><br>" +
                       "Price: $%{y:.2f}<br>" +
-                      "Category: %{customdata}<br>" +
+                      "Rating: %{customdata}<br>" +
                       "<extra></extra>",
-        customdata=route_data['percentage'],
+        customdata=route_data['rating'],
         name="Price"
     ))
     
@@ -255,10 +278,10 @@ def create_route_analysis(df, origin, destination):
     # Color explanation
     st.markdown("""
     <div class="explanation-box">
-    <h4>🎨 Price Color Guide</h4>
-    <p><strong>🟢 Green:</strong> Most competitive prices (cheapest 20%)</p>
-    <p><strong>🟠 Orange:</strong> Moderate prices (middle 50%)</p>
-    <p><strong>🔴 Red:</strong> Highest prices (most expensive 30%)</p>
+    <h4>🎨 Rating Color Guide</h4>
+    <p><strong>🟢 Green (Rating 1):</strong> Best price - most competitive option</p>
+    <p><strong>🟠 Orange (Rating 2):</strong> Fair price - moderate competitiveness</p>
+    <p><strong>🔴 Red (Rating 3):</strong> Premium price - least competitive option</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -269,7 +292,7 @@ def show_detailed_route_info(route_data):
     st.markdown("### 📋 Detailed Information")
     
     # Prepare display data
-    display_columns = ['airline', 'min_charge2', 'percentage', 'direct_indirect', 'rating']
+    display_columns = ['airline', 'min_charge2', 'rating', 'direct_indirect']
     available_columns = [col for col in display_columns if col in route_data.columns]
     
     display_df = route_data[available_columns].copy()
@@ -278,9 +301,8 @@ def show_detailed_route_info(route_data):
     column_names = {
         'airline': 'Airline',
         'min_charge2': 'Price (USD)',
-        'percentage': 'Price Category',
-        'direct_indirect': 'Connection Type',
-        'rating': 'Internal Rating'
+        'rating': 'Numerical Rating',
+        'direct_indirect': 'Connection Type'
     }
     
     display_df = display_df.rename(columns=column_names)
@@ -289,19 +311,20 @@ def show_detailed_route_info(route_data):
     if 'Price (USD)' in display_df.columns:
         display_df['Price (USD)'] = display_df['Price (USD)'].apply(lambda x: f"${x:.2f}")
     
-    # Style the dataframe
-    def highlight_categories(row):
-        if 'Price Category' in row.index:
-            category = str(row['Price Category']).lower()
-            if category in ['green']:
-                return ['background-color: #d4edda'] * len(row)
-            elif category in ['orange']:
-                return ['background-color: #fff3cd'] * len(row)
-            elif category in ['red']:
-                return ['background-color: #f8d7da'] * len(row)
+    # Style the dataframe based on numerical rating
+    def highlight_ratings(row):
+        if 'Numerical Rating' in row.index:
+            rating = row['Numerical Rating']
+            if pd.notna(rating):
+                if rating == 1:
+                    return ['background-color: #d4edda'] * len(row)  # Green
+                elif rating == 2:
+                    return ['background-color: #fff3cd'] * len(row)  # Orange  
+                elif rating == 3:
+                    return ['background-color: #f8d7da'] * len(row)  # Red
         return [''] * len(row)
     
-    styled_df = display_df.style.apply(highlight_categories, axis=1)
+    styled_df = display_df.style.apply(highlight_ratings, axis=1)
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
     # Additional route insights
@@ -328,11 +351,11 @@ def create_airline_overview(df):
     airline_stats = df.groupby('airline').agg({
         'min_charge2': ['mean', 'min', 'max', 'count'],
         'route': 'nunique',
-        'percentage': lambda x: (x.astype(str).str.lower() == 'green').sum() / len(x) * 100
+        'rating': lambda x: (x == 1).sum() / len(x) * 100  # Percentage of rating 1 (best prices)
     }).round(2)
     
     # Flatten column names
-    airline_stats.columns = ['avg_price', 'min_price', 'max_price', 'total_bids', 'routes_served', 'green_percentage']
+    airline_stats.columns = ['avg_price', 'min_price', 'max_price', 'total_bids', 'routes_served', 'best_price_percentage']
     airline_stats = airline_stats.reset_index()
     airline_stats = airline_stats.sort_values('total_bids', ascending=False)
     
@@ -344,7 +367,7 @@ def create_airline_overview(df):
     display_stats['avg_price'] = display_stats['avg_price'].apply(lambda x: f"${x:.2f}")
     display_stats['min_price'] = display_stats['min_price'].apply(lambda x: f"${x:.2f}")
     display_stats['max_price'] = display_stats['max_price'].apply(lambda x: f"${x:.2f}")
-    display_stats['green_percentage'] = display_stats['green_percentage'].apply(lambda x: f"{x:.1f}%")
+    display_stats['best_price_percentage'] = display_stats['best_price_percentage'].apply(lambda x: f"{x:.1f}%")
     
     # Rename columns
     display_stats = display_stats.rename(columns={
@@ -354,7 +377,7 @@ def create_airline_overview(df):
         'max_price': 'Highest Price',
         'total_bids': 'Total Bids',
         'routes_served': 'Routes Served',
-        'green_percentage': 'Best Price Rate'
+        'best_price_percentage': 'Best Price Rate'
     })
     
     st.dataframe(display_stats, use_container_width=True, hide_index=True)
@@ -369,13 +392,13 @@ def create_airline_overview(df):
             x='routes_served',
             y='avg_price',
             size='total_bids',
-            color='green_percentage',
+            color='best_price_percentage',
             hover_name='airline',
             title="Routes Served vs Average Price",
             labels={
                 'routes_served': 'Number of Routes Served',
                 'avg_price': 'Average Price (USD)',
-                'green_percentage': 'Best Price Rate (%)',
+                'best_price_percentage': 'Best Price Rate (%)',
                 'total_bids': 'Total Bids'
             },
             color_continuous_scale='RdYlGn'
@@ -384,16 +407,16 @@ def create_airline_overview(df):
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
-        # Top 10 airlines by competitiveness (green percentage)
-        top_competitive = airline_stats.nlargest(10, 'green_percentage')
+        # Top 10 airlines by competitiveness (rating 1 percentage)
+        top_competitive = airline_stats.nlargest(10, 'best_price_percentage')
         
         fig2 = px.bar(
             top_competitive,
             x='airline',
-            y='green_percentage',
+            y='best_price_percentage',
             title='Most Competitive Airlines (% of Best Prices)',
-            labels={'green_percentage': 'Best Price Rate (%)', 'airline': 'Airlines'},
-            color='green_percentage',
+            labels={'best_price_percentage': 'Best Price Rate (%)', 'airline': 'Airlines'},
+            color='best_price_percentage',
             color_continuous_scale='RdYlGn'
         )
         fig2.update_layout(height=400, showlegend=False)
@@ -478,7 +501,7 @@ def main():
                                 - **Airline:** {best_airline['airline']}
                                 - **Price:** ${best_airline['min_charge2']:.2f}
                                 - **Type:** {best_airline.get('direct_indirect', 'N/A')}
-                                - **Rating:** {best_airline['percentage']}
+                                - **Rating:** {best_airline['rating']} ({best_airline.get('rating_category', 'N/A')})
                                 """)
                             
                             with col2:
@@ -516,11 +539,11 @@ def main():
         - 📊 **Understanding Value:** Color-coded ratings show price competitiveness
         - 📈 **Analyzing Trends:** Overview of airline performance across all routes
         
-        ### 🎨 Easy Color System
+        ### 🎨 Easy Rating System
         
-        - 🟢 **Green = Great Deal** (Top 20% best prices)
-        - 🟠 **Orange = Fair Price** (Middle 50% range)
-        - 🔴 **Red = Premium Price** (Top 30% most expensive)
+        - 🟢 **Rating 1 = Best Price** (Most competitive option)
+        - 🟠 **Rating 2 = Fair Price** (Moderate competitiveness)
+        - 🔴 **Rating 3 = Premium Price** (Least competitive option)
         
         ### 📁 File Requirements
         
