@@ -25,14 +25,26 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
+    .section-header {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 1.5rem 0 1rem 0;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 0.5rem;
+    }
     .metric-container {
         background-color: #f8f9fa;
         padding: 1rem;
         border-radius: 0.5rem;
         margin: 0.5rem 0;
     }
-    .stSelectbox > div > div > div > div {
-        background-color: white;
+    .info-box {
+        background-color: #e8f4fd;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -108,16 +120,19 @@ def load_data(uploaded_file):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
         # Create route column
-        df['route'] = df['origin_airport'] + ' → ' + df['destination_airport']
+        df['route'] = df['origin_airport'] + ' ➜ ' + df['destination_airport']
         
         # Clean percentage column and create color mapping
         if 'percentage' in df.columns:
             df['percentage'] = df['percentage'].astype(str).str.strip()
-            df['color'] = df['percentage'].map({
+            # Map colors for visualization
+            color_map = {
                 'Green': '#28a745',
                 'Orange': '#fd7e14', 
                 'Red': '#dc3545'
-            })
+            }
+            df['color'] = df['percentage'].map(color_map)
+            df['color'] = df['color'].fillna('#6c757d')  # Gray for unknown
         
         # Filter out rows with missing critical data
         df = df.dropna(subset=['origin_airport', 'destination_airport', 'airline', 'min_charge2'])
@@ -128,91 +143,266 @@ def load_data(uploaded_file):
         st.error(f"Error loading data: {str(e)}")
         return None
 
-def create_route_comparison_chart(df, selected_route):
-    """Create a comparison chart for airlines serving a specific route"""
-    route_data = df[df['route'] == selected_route].copy()
+def show_data_overview(df):
+    """Show overview of the loaded data"""
+    st.markdown('<div class="section-header">📊 Data Overview</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_records = len(df)
+        st.metric("📝 Total Records", f"{total_records:,}")
+    
+    with col2:
+        unique_routes = df['route'].nunique()
+        st.metric("🛫 Unique Routes", f"{unique_routes:,}")
+    
+    with col3:
+        unique_airlines = df['airline'].nunique()
+        st.metric("✈️ Airlines", f"{unique_airlines:,}")
+    
+    with col4:
+        avg_price = df['min_charge2'].mean()
+        st.metric("💰 Avg Price", f"${avg_price:.2f}")
+    
+    # Price distribution by category
+    st.markdown("### Price Category Distribution")
+    
+    if 'percentage' in df.columns:
+        color_counts = df['percentage'].value_counts()
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            fig = px.pie(
+                values=color_counts.values,
+                names=color_counts.index,
+                title="Distribution of Price Categories",
+                color=color_counts.index,
+                color_discrete_map={
+                    'Green': '#28a745',
+                    'Orange': '#fd7e14',
+                    'Red': '#dc3545'
+                },
+                hole=0.4
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(height=300, showlegend=True)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("**Category Meanings:**")
+            st.markdown("🟢 **Green**: Cheapest 20%")
+            st.markdown("🟠 **Orange**: Middle 50%")
+            st.markdown("🔴 **Red**: Most expensive 30%")
+            
+            st.markdown("**Summary:**")
+            total = color_counts.sum()
+            for category, count in color_counts.items():
+                percentage = (count / total) * 100
+                st.write(f"• {category}: {count} ({percentage:.1f}%)")
+
+def create_route_analysis(df, origin, destination):
+    """Create detailed analysis for a specific route"""
+    route_data = df[(df['origin_airport'] == origin) & (df['destination_airport'] == destination)].copy()
     
     if route_data.empty:
-        return None
+        st.warning("⚠️ No data found for this route combination.")
+        return
     
-    # Sort by price
+    route_name = f"{origin} ➜ {destination}"
+    st.markdown(f'<div class="section-header">🎯 Route Analysis: {route_name}</div>', unsafe_allow_html=True)
+    
+    # Route metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        airline_count = route_data['airline'].nunique()
+        st.metric("Airlines Available", airline_count)
+    
+    with col2:
+        min_price = route_data['min_charge2'].min()
+        st.metric("Best Price", f"${min_price:.2f}")
+    
+    with col3:
+        avg_price = route_data['min_charge2'].mean()
+        st.metric("Average Price", f"${avg_price:.2f}")
+    
+    with col4:
+        price_range = route_data['min_charge2'].max() - route_data['min_charge2'].min()
+        st.metric("Price Range", f"${price_range:.2f}")
+    
+    # Main visualization
+    st.markdown("### 📊 Airlines Comparison")
+    
+    # Sort by price for better visualization
     route_data = route_data.sort_values('min_charge2')
     
-    # Create bar chart
-    fig = px.bar(
-        route_data,
-        x='airline',
-        y='min_charge2',
-        color='percentage',
-        color_discrete_map={
-            'Green': '#28a745',
-            'Orange': '#fd7e14',
-            'Red': '#dc3545'
-        },
-        title=f'Airline Pricing Comparison for {selected_route}',
-        labels={'min_charge2': 'Min Charge (USD)', 'airline': 'Airline'},
-        text='min_charge2'
-    )
+    # Create the main chart
+    fig = go.Figure()
     
-    # Update layout
-    fig.update_traces(texttemplate='$%{text:.2f}', textposition='outside')
+    # Add bars with custom colors
+    fig.add_trace(go.Bar(
+        x=route_data['airline'],
+        y=route_data['min_charge2'],
+        marker_color=route_data['color'],
+        text=[f"${price:.2f}<br>{category}" for price, category in zip(route_data['min_charge2'], route_data['percentage'])],
+        textposition='outside',
+        hovertemplate="<b>%{x}</b><br>" +
+                      "Price: $%{y:.2f}<br>" +
+                      "<extra></extra>",
+        name="Price"
+    ))
+    
     fig.update_layout(
-        xaxis_title="Airline",
-        yaxis_title="Min Charge (USD)",
-        showlegend=True,
-        height=400
+        title=f"Airline Pricing for {route_name}",
+        xaxis_title="Airlines",
+        yaxis_title="Price (USD)",
+        height=500,
+        showlegend=False,
+        xaxis={'categoryorder': 'total ascending'}
     )
     
-    return fig
-
-def create_price_distribution_chart(df):
-    """Create a price distribution chart by color category"""
-    color_counts = df['percentage'].value_counts()
+    st.plotly_chart(fig, use_container_width=True)
     
-    fig = px.pie(
-        values=color_counts.values,
-        names=color_counts.index,
-        title="Price Distribution by Category",
-        color=color_counts.index,
-        color_discrete_map={
-            'Green': '#28a745',
-            'Orange': '#fd7e14',
-            'Red': '#dc3545'
-        }
-    )
+    # Detailed data table
+    st.markdown("### 📋 Detailed Information")
     
-    fig.update_layout(height=400)
-    return fig
+    # Prepare display data
+    display_data = route_data.copy()
+    display_columns = ['airline', 'min_charge2', 'percentage', 'direct_indirect', 'rating']
+    available_columns = [col for col in display_columns if col in display_data.columns]
+    
+    display_df = display_data[available_columns].copy()
+    
+    # Rename for better display
+    column_names = {
+        'airline': 'Airline',
+        'min_charge2': 'Price (USD)',
+        'percentage': 'Price Category',
+        'direct_indirect': 'Connection',
+        'rating': 'Rating'
+    }
+    
+    display_df = display_df.rename(columns=column_names)
+    
+    # Format price
+    if 'Price (USD)' in display_df.columns:
+        display_df['Price (USD)'] = display_df['Price (USD)'].apply(lambda x: f"${x:.2f}")
+    
+    # Style the dataframe
+    def highlight_categories(row):
+        if 'Price Category' in row.index:
+            if row['Price Category'] == 'Green':
+                return ['background-color: #d4edda'] * len(row)
+            elif row['Price Category'] == 'Orange':
+                return ['background-color: #fff3cd'] * len(row)
+            elif row['Price Category'] == 'Red':
+                return ['background-color: #f8d7da'] * len(row)
+        return [''] * len(row)
+    
+    styled_df = display_df.style.apply(highlight_categories, axis=1)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-def create_route_overview_chart(df):
-    """Create an overview chart of all routes with average prices"""
-    route_summary = df.groupby('route').agg({
-        'min_charge2': 'mean',
-        'airline': 'count'
+def create_airline_overview(df):
+    """Create overview analysis by airline"""
+    st.markdown('<div class="section-header">🏢 Airlines Overview</div>', unsafe_allow_html=True)
+    
+    # Calculate airline statistics
+    airline_stats = df.groupby('airline').agg({
+        'min_charge2': ['mean', 'min', 'max', 'count'],
+        'route': 'nunique',
+        'percentage': lambda x: (x == 'Green').sum() / len(x) * 100
     }).round(2)
     
-    route_summary.columns = ['avg_price', 'airline_count']
-    route_summary = route_summary.reset_index()
-    route_summary = route_summary.sort_values('avg_price', ascending=True)
+    # Flatten column names
+    airline_stats.columns = ['avg_price', 'min_price', 'max_price', 'total_bids', 'routes_served', 'green_percentage']
+    airline_stats = airline_stats.reset_index()
+    airline_stats = airline_stats.sort_values('total_bids', ascending=False)
     
-    # Take top 20 routes by number of airlines
-    top_routes = route_summary.nlargest(20, 'airline_count')
+    # Top airlines chart
+    st.markdown("### 📈 Airline Performance Metrics")
     
-    fig = px.scatter(
-        top_routes,
-        x='airline_count',
-        y='avg_price',
-        size='airline_count',
-        hover_data=['route'],
-        title="Route Overview: Average Price vs Number of Airlines",
-        labels={
-            'airline_count': 'Number of Airlines',
-            'avg_price': 'Average Price (USD)'
-        }
-    )
+    col1, col2 = st.columns(2)
     
-    fig.update_layout(height=500)
-    return fig
+    with col1:
+        # Routes served vs Average price
+        fig1 = px.scatter(
+            airline_stats.head(15),
+            x='routes_served',
+            y='avg_price',
+            size='total_bids',
+            color='green_percentage',
+            hover_name='airline',
+            title="Routes Served vs Average Price",
+            labels={
+                'routes_served': 'Number of Routes Served',
+                'avg_price': 'Average Price (USD)',
+                'green_percentage': 'Green Rate (%)',
+                'total_bids': 'Total Bids'
+            },
+            color_continuous_scale='RdYlGn'
+        )
+        fig1.update_layout(height=400)
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        # Price range by airline
+        top_airlines = airline_stats.head(10)
+        fig2 = go.Figure()
+        
+        fig2.add_trace(go.Bar(
+            name='Min Price',
+            x=top_airlines['airline'],
+            y=top_airlines['min_price'],
+            marker_color='lightblue'
+        ))
+        
+        fig2.add_trace(go.Bar(
+            name='Average Price',
+            x=top_airlines['airline'],
+            y=top_airlines['avg_price'],
+            marker_color='blue'
+        ))
+        
+        fig2.add_trace(go.Bar(
+            name='Max Price',
+            x=top_airlines['airline'],
+            y=top_airlines['max_price'],
+            marker_color='darkblue'
+        ))
+        
+        fig2.update_layout(
+            title='Price Range by Top Airlines',
+            xaxis_title='Airlines',
+            yaxis_title='Price (USD)',
+            barmode='group',
+            height=400
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # Airlines summary table
+    st.markdown("### 📊 Airlines Summary Table")
+    
+    # Format the display
+    display_stats = airline_stats.copy()
+    display_stats['avg_price'] = display_stats['avg_price'].apply(lambda x: f"${x:.2f}")
+    display_stats['min_price'] = display_stats['min_price'].apply(lambda x: f"${x:.2f}")
+    display_stats['max_price'] = display_stats['max_price'].apply(lambda x: f"${x:.2f}")
+    display_stats['green_percentage'] = display_stats['green_percentage'].apply(lambda x: f"{x:.1f}%")
+    
+    # Rename columns
+    display_stats = display_stats.rename(columns={
+        'airline': 'Airline',
+        'avg_price': 'Avg Price',
+        'min_price': 'Min Price',
+        'max_price': 'Max Price',
+        'total_bids': 'Total Bids',
+        'routes_served': 'Routes',
+        'green_percentage': 'Green Rate'
+    })
+    
+    st.dataframe(display_stats, use_container_width=True, hide_index=True)
 
 def main():
     # Header
@@ -220,236 +410,102 @@ def main():
     
     # File upload
     uploaded_file = st.file_uploader(
-        "Upload your Excel file with Airline Bids data",
+        "📁 Upload your Excel file with Airline Bids data",
         type=['xlsx', 'xls'],
         help="Please upload the Excel file containing the 'Airline Bids' sheet"
     )
     
     if uploaded_file is not None:
         # Load data
-        with st.spinner("Loading data..."):
+        with st.spinner("🔄 Loading and processing data..."):
             df = load_data(uploaded_file)
         
         if df is not None:
-            # Sidebar filters
-            st.sidebar.header("Filters")
+            # Show data overview first
+            show_data_overview(df)
             
-            # Route selection
-            routes = sorted(df['route'].unique())
-            selected_route = st.sidebar.selectbox(
-                "Select Route",
-                routes,
-                help="Choose a route to see detailed airline comparison"
-            )
+            # Airlines overview
+            create_airline_overview(df)
             
-            # Airline filter
-            airlines = sorted(df['airline'].unique())
-            selected_airlines = st.sidebar.multiselect(
-                "Filter by Airlines",
-                airlines,
-                default=airlines,
-                help="Select airlines to include in the analysis"
-            )
+            # Route selection section
+            st.markdown('<div class="section-header">🎯 Route-Specific Analysis</div>', unsafe_allow_html=True)
             
-            # Price range filter
-            if 'min_charge2' in df.columns:
-                min_price = float(df['min_charge2'].min())
-                max_price = float(df['min_charge2'].max())
-                price_range = st.sidebar.slider(
-                    "Price Range (USD)",
-                    min_value=min_price,
-                    max_value=max_price,
-                    value=(min_price, max_price),
-                    step=0.1
-                )
+            st.markdown("""
+            <div class="info-box">
+            <strong>📍 Select Origin and Destination</strong><br>
+            Choose specific airports to see detailed airline comparison, pricing, and ratings for that route.
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Apply filters
-            filtered_df = df[
-                (df['airline'].isin(selected_airlines)) &
-                (df['min_charge2'] >= price_range[0]) &
-                (df['min_charge2'] <= price_range[1])
-            ]
+            # Get unique airports
+            origins = sorted(df['origin_airport'].unique())
+            destinations = sorted(df['destination_airport'].unique())
             
-            # Main dashboard
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Routes", len(filtered_df['route'].unique()))
-            
-            with col2:
-                st.metric("Total Airlines", len(filtered_df['airline'].unique()))
-            
-            with col3:
-                avg_price = filtered_df['min_charge2'].mean()
-                st.metric("Average Price", f"${avg_price:.2f}")
-            
-            with col4:
-                green_percentage = (filtered_df['percentage'] == 'Green').mean() * 100
-                st.metric("Green Rates %", f"{green_percentage:.1f}%")
-            
-            # Charts
-            st.markdown("---")
-            
-            # Route-specific analysis
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.subheader(f"Airline Comparison for {selected_route}")
-                route_chart = create_route_comparison_chart(filtered_df, selected_route)
-                if route_chart:
-                    st.plotly_chart(route_chart, use_container_width=True)
-                else:
-                    st.info("No data available for the selected route with current filters.")
-            
-            with col2:
-                st.subheader("Price Category Distribution")
-                price_dist_chart = create_price_distribution_chart(filtered_df)
-                st.plotly_chart(price_dist_chart, use_container_width=True)
-            
-            # Route overview
-            st.markdown("---")
-            st.subheader("Routes Overview")
-            route_overview_chart = create_route_overview_chart(filtered_df)
-            st.plotly_chart(route_overview_chart, use_container_width=True)
-            
-            # Detailed data table
-            st.markdown("---")
-            st.subheader("Detailed Data")
-            
-            # Table filters
             col1, col2 = st.columns(2)
+            
             with col1:
-                show_route = st.selectbox(
-                    "Show data for route:",
-                    ["All routes"] + routes,
-                    key="table_route_filter"
+                selected_origin = st.selectbox(
+                    "🛫 Origin Airport",
+                    origins,
+                    help="Select the departure airport"
                 )
             
             with col2:
-                sort_by = st.selectbox(
-                    "Sort by:",
-                    ["min_charge2", "airline", "route", "percentage"],
-                    key="table_sort"
-                )
-            
-            # Filter and sort data for table
-            table_df = filtered_df.copy()
-            if show_route != "All routes":
-                table_df = table_df[table_df['route'] == show_route]
-            
-            table_df = table_df.sort_values(sort_by)
-            
-            # Display columns for the table
-            display_columns = [
-                'route', 'airline', 'min_charge2', 'percentage', 
-                'direct_indirect', 'currency'
-            ]
-            
-            # Filter columns that exist in the dataframe
-            available_columns = [col for col in display_columns if col in table_df.columns]
-            
-            # Rename columns for display
-            column_names = {
-                'route': 'Route',
-                'airline': 'Airline',
-                'min_charge2': 'Price (USD)',
-                'percentage': 'Price Category',
-                'direct_indirect': 'Connection Type',
-                'currency': 'Currency'
-            }
-            
-            display_df = table_df[available_columns].copy()
-            display_df = display_df.rename(columns=column_names)
-            
-            # Format price column
-            if 'Price (USD)' in display_df.columns:
-                display_df['Price (USD)'] = display_df['Price (USD)'].apply(lambda x: f"${x:.2f}" if pd.notna(x) else "N/A")
-            
-            # Color code the rows based on price category
-            def highlight_price_category(row):
-                if 'Price Category' in row.index:
-                    if row['Price Category'] == 'Green':
-                        return ['background-color: #d4edda'] * len(row)
-                    elif row['Price Category'] == 'Orange':
-                        return ['background-color: #fff3cd'] * len(row)
-                    elif row['Price Category'] == 'Red':
-                        return ['background-color: #f8d7da'] * len(row)
-                return [''] * len(row)
-            
-            styled_df = display_df.style.apply(highlight_price_category, axis=1)
-            st.dataframe(styled_df, use_container_width=True, height=400)
-            
-            # Download filtered data
-            csv = table_df.to_csv(index=False)
-            st.download_button(
-                label="Download filtered data as CSV",
-                data=csv,
-                file_name=f"airline_bids_filtered_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv"
-            )
-            
-            # Summary statistics
-            st.markdown("---")
-            st.subheader("Summary Statistics")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("**Price Statistics**")
-                if 'min_charge2' in filtered_df.columns:
-                    st.write(f"• Minimum Price: ${filtered_df['min_charge2'].min():.2f}")
-                    st.write(f"• Maximum Price: ${filtered_df['min_charge2'].max():.2f}")
-                    st.write(f"• Median Price: ${filtered_df['min_charge2'].median():.2f}")
-                    st.write(f"• Standard Deviation: ${filtered_df['min_charge2'].std():.2f}")
-            
-            with col2:
-                st.markdown("**Category Distribution**")
-                if 'percentage' in filtered_df.columns:
-                    category_counts = filtered_df['percentage'].value_counts()
-                    total = len(filtered_df)
-                    for category, count in category_counts.items():
-                        percentage = (count / total) * 100
-                        st.write(f"• {category}: {count} ({percentage:.1f}%)")
-            
-            with col3:
-                st.markdown("**Route Statistics**")
-                routes_count = len(filtered_df['route'].unique())
-                airlines_count = len(filtered_df['airline'].unique())
-                avg_airlines_per_route = filtered_df.groupby('route')['airline'].nunique().mean()
+                # Filter destinations based on origin
+                available_destinations = df[df['origin_airport'] == selected_origin]['destination_airport'].unique()
+                available_destinations = sorted(available_destinations)
                 
-                st.write(f"• Total Routes: {routes_count}")
-                st.write(f"• Total Airlines: {airlines_count}")
-                st.write(f"• Avg Airlines per Route: {avg_airlines_per_route:.1f}")
+                selected_destination = st.selectbox(
+                    "🛬 Destination Airport",
+                    available_destinations,
+                    help="Select the arrival airport"
+                )
+            
+            # Show route analysis
+            if selected_origin and selected_destination:
+                create_route_analysis(df, selected_origin, selected_destination)
             
     else:
         # Instructions when no file is uploaded
-        st.info("👆 Please upload an Excel file to get started")
+        st.markdown("""
+        <div class="info-box">
+        <strong>🚀 Getting Started</strong><br>
+        Upload your Excel file above to begin analyzing airline bid data. The file should contain a sheet named 'Airline Bids' with pricing and route information.
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("""
-        ### Expected File Format
+        ### 📋 What This Dashboard Shows
         
-        Your Excel file should contain a sheet named **'Airline Bids'** with the following columns:
+        **1. 📊 Data Overview**
+        - Summary statistics of your airline bids data
+        - Price category distribution (Green/Orange/Red)
+        - Key metrics at a glance
         
-        - **Origin Airport**: Source airport code
-        - **Destination Airport**: Destination airport code  
-        - **Airline**: Airline code or name
-        - **Min Charge2**: Price in USD
-        - **Percentage**: Price category (Green/Orange/Red)
-        - **Direct / Indirect**: Connection type
-        - And other relevant columns...
+        **2. 🏢 Airlines Overview**  
+        - Performance comparison across all airlines
+        - Routes served vs pricing analysis
+        - Success rates and competitiveness metrics
         
-        ### Color Coding System
+        **3. 🎯 Route-Specific Analysis**
+        - Select any origin-destination pair
+        - Compare all airlines serving that route
+        - Clear pricing visualization with color coding
+        - Detailed information table
         
-        - 🟢 **Green**: Cheapest 20% of prices
-        - 🟠 **Orange**: Next 50% of prices  
-        - 🔴 **Red**: Most expensive 30% of prices
+        ### 🎨 Color Coding System
         
-        ### Dashboard Features
+        - 🟢 **Green**: Best prices (cheapest 20%)
+        - 🟠 **Orange**: Moderate prices (middle 50%)  
+        - 🔴 **Red**: Highest prices (most expensive 30%)
         
-        - **Route Comparison**: Compare airlines serving the same route
-        - **Price Analysis**: Distribution of prices by category
-        - **Interactive Filters**: Filter by route, airline, and price range
-        - **Data Export**: Download filtered results as CSV
+        ### 📁 Expected File Format
+        
+        Your Excel file should have an **'Airline Bids'** sheet with columns like:
+        - Origin Airport, Destination Airport
+        - Airline, Min Charge2 (price)
+        - Percentage (color category)
+        - Direct/Indirect, Rating
         """)
 
 if __name__ == "__main__":
